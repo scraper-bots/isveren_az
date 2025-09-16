@@ -108,39 +108,40 @@ class IsverenScraper:
         processed_cvs = []
 
         for cv in cvs:
+            cv_id = cv.get('id', 'unknown')
             try:
-                # Parse JSON fields
+                # Parse JSON fields safely
                 skills = self.parse_json_field(cv.get('skills', '[]'))
                 languages = self.parse_json_field(cv.get('language', '[]'))
                 experience = self.parse_json_field(cv.get('experience', '[]'))
                 education = self.parse_json_field(cv.get('education', '[]'))
                 hobbies = self.parse_json_field(cv.get('hobby', '[]'))
 
-                # Extract user and city information
-                user = cv.get('user', {})
-                city = cv.get('city', {})
-                working_hour = cv.get('working_hour', {})
+                # Extract user and city information safely
+                user = cv.get('user') or {}
+                city = cv.get('city') or {}
+                working_hour = cv.get('working_hour') or {}
 
-                # Create flattened record
+                # Create flattened record with safe field access
                 record = {
-                    'id': cv.get('id'),
-                    'title': cv.get('title'),
-                    'slug': cv.get('slug'),
-                    'name': user.get('name'),
-                    'surname': user.get('surname'),
-                    'birthday': cv.get('birthday'),
+                    'id': cv_id,
+                    'title': cv.get('title', ''),
+                    'slug': cv.get('slug', ''),
+                    'name': user.get('name', '') if user else '',
+                    'surname': user.get('surname', '') if user else '',
+                    'birthday': cv.get('birthday', ''),
                     'gender': 'Male' if cv.get('gender_status') == 1 else 'Female' if cv.get('gender_status') == 2 else 'Unknown',
                     'marital_status': self.get_marital_status(cv.get('married_status')),
                     'has_children': 'Yes' if cv.get('is_child') == 1 else 'No' if cv.get('is_child') == 2 else 'Unknown',
-                    'city': city.get('name', {}).get('az', '') if isinstance(city.get('name'), dict) else city.get('name', ''),
-                    'permanent_address': cv.get('permanent_address'),
-                    'actual_address': cv.get('actual_address'),
-                    'phone': cv.get('phone'),
-                    'email': cv.get('email'),
-                    'working_hour': working_hour.get('name', {}).get('az', '') if isinstance(working_hour.get('name'), dict) else working_hour.get('name', ''),
-                    'min_salary': cv.get('min_salary'),
-                    'max_salary': cv.get('max_salary'),
-                    'desired_address': cv.get('desired_address'),
+                    'city': self.safe_get_city_name(city),
+                    'permanent_address': cv.get('permanent_address', ''),
+                    'actual_address': cv.get('actual_address', ''),
+                    'phone': cv.get('phone', ''),
+                    'email': cv.get('email', ''),
+                    'working_hour': self.safe_get_working_hour(working_hour),
+                    'min_salary': cv.get('min_salary', ''),
+                    'max_salary': cv.get('max_salary', ''),
+                    'desired_address': cv.get('desired_address', ''),
                     'skills': self.format_list_field(skills),
                     'languages': self.format_languages(languages),
                     'experience': self.format_experience(experience),
@@ -149,16 +150,16 @@ class IsverenScraper:
                     'motivation_letter': cv.get('motivation_letter', ''),
                     'note': cv.get('note', ''),
                     'views': cv.get('reads', 0),
-                    'created_at': cv.get('created_at'),
-                    'updated_at': cv.get('updated_at'),
+                    'created_at': cv.get('created_at', ''),
+                    'updated_at': cv.get('updated_at', ''),
                     'resume_file': cv.get('resume', ''),
-                    'profile_image': user.get('image', ''),
-                    'user_position': user.get('position', ''),
-                    'user_email': user.get('email', ''),
-                    'user_phone': user.get('phone', ''),
-                    'category_id': cv.get('category_id'),
-                    'parent_category_id': cv.get('parent_category_id'),
-                    'status': cv.get('status'),
+                    'profile_image': user.get('image', '') if user else '',
+                    'user_position': user.get('position', '') if user else '',
+                    'user_email': user.get('email', '') if user else '',
+                    'user_phone': user.get('phone', '') if user else '',
+                    'category_id': cv.get('category_id', ''),
+                    'parent_category_id': cv.get('parent_category_id', ''),
+                    'status': cv.get('status', ''),
                     'is_premium': cv.get('is_premium', 0),
                     'share_count': cv.get('share', 0)
                 }
@@ -166,7 +167,20 @@ class IsverenScraper:
                 processed_cvs.append(record)
 
             except Exception as e:
-                logger.error(f"Error processing CV {cv.get('id', 'unknown')}: {e}")
+                logger.error(f"Error processing CV {cv_id}: {e}")
+                logger.error(f"CV data that failed: {cv}")
+                # Still add a minimal record so we don't lose the CV entirely
+                try:
+                    minimal_record = {
+                        'id': cv_id,
+                        'title': cv.get('title', 'ERROR_PROCESSING'),
+                        'name': 'ERROR',
+                        'surname': 'PROCESSING',
+                        'error': str(e)
+                    }
+                    processed_cvs.append(minimal_record)
+                except:
+                    logger.error(f"Could not even create minimal record for CV {cv_id}")
                 continue
 
         logger.info(f"Successfully processed {len(processed_cvs)} CVs")
@@ -189,6 +203,24 @@ class IsverenScraper:
             3: 'Married - Has children'
         }
         return status_map.get(status, 'Unknown')
+
+    def safe_get_city_name(self, city):
+        """Safely extract city name"""
+        if not city:
+            return ''
+        name = city.get('name', '')
+        if isinstance(name, dict):
+            return name.get('az', '')
+        return str(name)
+
+    def safe_get_working_hour(self, working_hour):
+        """Safely extract working hour"""
+        if not working_hour:
+            return ''
+        name = working_hour.get('name', '')
+        if isinstance(name, dict):
+            return name.get('az', '')
+        return str(name)
 
     def format_list_field(self, items):
         """Format list items as comma-separated string"""
