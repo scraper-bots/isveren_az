@@ -27,6 +27,18 @@ class IsverenScraper:
             'Sec-Fetch-Site': 'same-origin'
         })
 
+    def initialize_session(self):
+        """Initialize session by visiting the main CV page first"""
+        try:
+            logger.info("Initializing session...")
+            response = self.session.get("https://isveren.az/cv")
+            response.raise_for_status()
+            logger.info("Session initialized successfully")
+            return True
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to initialize session: {e}")
+            return False
+
     def get_page_data(self, page=1):
         """Fetch data from a specific page"""
         try:
@@ -34,18 +46,28 @@ class IsverenScraper:
             response = self.session.get(self.base_url, params=params)
             response.raise_for_status()
 
-            data = response.json()
-            return data
+            # Debug: print response details if JSON parsing fails
+            try:
+                data = response.json()
+                return data
+            except json.JSONDecodeError as e:
+                logger.error(f"Error parsing JSON for page {page}: {e}")
+                logger.error(f"Response status: {response.status_code}")
+                logger.error(f"Response headers: {dict(response.headers)}")
+                logger.error(f"Response content (first 500 chars): {response.text[:500]}")
+                return None
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching page {page}: {e}")
-            return None
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing JSON for page {page}: {e}")
             return None
 
     def scrape_all_cvs(self):
         """Scrape all CV data from all pages"""
         logger.info("Starting to scrape CV data from isveren.az")
+
+        # Initialize session first
+        if not self.initialize_session():
+            logger.error("Failed to initialize session. Exiting.")
+            return []
 
         all_cvs = []
         page = 1
